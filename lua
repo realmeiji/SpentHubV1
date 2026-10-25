@@ -346,7 +346,6 @@ gui.Name = "SpentHubPremium"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-gui.ZIndex = 100
 
 -- Main window with glassmorphism
 local mainWindow = Instance.new("Frame", gui)
