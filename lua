@@ -2,36 +2,15 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
 if not syn or not protectgui then getgenv().protectgui = function() end end
 
--- ============ LOAD OBSIDIAN LIBRARY ============
-local Obsidian
-local obsidianUrls = {
-    "https://raw.githubusercontent.com/Obsidian-Development/Obsidian/main/library.lua",
-    "https://raw.githubusercontent.com/Obsidian-Development/Obsidian/main/src/library.lua",
-    "https://raw.githubusercontent.com/ic3w0lf/Obsidian/main/source.lua",
-}
-
-for _, url in ipairs(obsidianUrls) do
-    local success, result = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if success and result then
-        Obsidian = result
-        break
-    end
-end
-
-if not Obsidian then
-    error("Failed to load Obsidian library from all sources")
-    return
-end
-
--- ============ ROBLOX NOTIFICATION SYSTEM ============
+-- ============ SERVICES ============
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
 
 local function robloxNotify(title, text, duration)
     pcall(function()
@@ -43,13 +22,11 @@ local function robloxNotify(title, text, duration)
     end)
 end
 
-robloxNotify("SPENT HUB", "Loading...", 2)
+robloxNotify("SPENT HUB", "Initializing Premium GUI...", 2)
 
 -- ============ SETTINGS ============
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
-    ToggleKey = "RightAlt",
     TeamCheck = false,
     VisibleCheck = false,
     TargetPart = "HumanoidRootPart",
@@ -73,33 +50,28 @@ local SilentAimSettings = {
     ESP_HighlightColor = Color3.fromRGB(255, 182, 193),
     ESP_NameColor = Color3.fromRGB(255, 255, 255),
     ESP_HPColor = Color3.fromRGB(80, 255, 100),
-    ESP_TraceColor = Color3.fromRGB(255, 255, 255),
 }
 getgenv().SilentAimSettings = SilentAimSettings
 
-local TARGET_LOCK_COLOR = Color3.fromRGB(255, 182, 193)
-local RING_IDLE_COLOR = Color3.fromRGB(255, 255, 255)
-
-local MainFileName = "UniversalSilentAim"
-local FileToSave = ""
-local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
-local GetPlayers = Players.GetPlayers
-local WorldToScreen = Camera.WorldToScreenPoint
-local WorldToViewportPoint = Camera.WorldToViewportPoint
-local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
-local FindFirstChild = game.FindFirstChild
-local RenderStepped = RunService.RenderStepped
-local GetMouseLocation = UserInputService.GetMouseLocation
-local resume = coroutine.resume
-local create = coroutine.create
-local ValidTargetParts = {"Head", "HumanoidRootPart"}
-local PredictionAmount = 0.165
+-- ============ THEME ============
+local Theme = {
+    BG_PRIMARY = Color3.fromRGB(8, 8, 12),
+    BG_SECONDARY = Color3.fromRGB(15, 15, 22),
+    BG_TERTIARY = Color3.fromRGB(25, 25, 35),
+    BG_HOVER = Color3.fromRGB(35, 35, 50),
+    ACCENT_PRIMARY = Color3.fromRGB(255, 182, 193),
+    ACCENT_SECONDARY = Color3.fromRGB(200, 140, 200),
+    TEXT_PRIMARY = Color3.fromRGB(250, 250, 255),
+    TEXT_SECONDARY = Color3.fromRGB(150, 150, 165),
+    TEXT_TERTIARY = Color3.fromRGB(100, 100, 115),
+    BORDER = Color3.fromRGB(60, 60, 75),
+    SUCCESS = Color3.fromRGB(80, 255, 100),
+}
 
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = true
 mouse_box.ZIndex = 999
-mouse_box.Color = Color3.fromRGB(255, 182, 193)
+mouse_box.Color = Theme.ACCENT_PRIMARY
 mouse_box.Thickness = 2
 mouse_box.Size = Vector2.new(20, 20)
 mouse_box.Filled = false
@@ -112,14 +84,26 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(255, 182, 193)
+fov_circle.Color = Theme.ACCENT_PRIMARY
+
+local MainFileName = "UniversalSilentAim"
+local FileToSave = ""
+local Mouse = LocalPlayer:GetMouse()
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GetMouseLocation = UserInputService.GetMouseLocation
+local PredictionAmount = 0.165
 
 -- ============ UTILITY FUNCTIONS ============
 local ExpectedArguments = {
-    FindPartOnRayWithIgnoreList = { ArgCountRequired = 3, Args = { "Instance", "Ray", "table", "boolean", "boolean" } },
-    FindPartOnRayWithWhitelist = { ArgCountRequired = 3, Args = { "Instance", "Ray", "table", "boolean" } },
-    FindPartOnRay = { ArgCountRequired = 2, Args = { "Instance", "Ray", "Instance", "boolean", "boolean" } },
-    Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } }
+    FindPartOnRayWithIgnoreList = { ArgCountRequired = 3 },
+    FindPartOnRayWithWhitelist = { ArgCountRequired = 3 },
+    FindPartOnRay = { ArgCountRequired = 2 },
+    Raycast = { ArgCountRequired = 3 }
 }
 
 local lastRollTime = 0
@@ -129,7 +113,6 @@ function CalculateChance(Percentage)
     local now = tick()
     if now - lastRollTime < 0.15 then return lastRollResult end
     lastRollTime = now
-    Percentage = math.floor(Percentage)
     local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
     lastRollResult = chance <= Percentage / 100
     return lastRollResult
@@ -150,13 +133,13 @@ local function GetFiles()
         if file:sub(-4) == '.lua' then
             local pos = file:find('.lua', 1, true)
             local start = pos
-            local char = file:sub(pos, pos)
-            while char ~= '/' and char ~= '\\' and char ~= '' do
+            while pos > 1 do
                 pos = pos - 1
-                char = file:sub(pos, pos)
-            end
-            if char == '/' or char == '\\' then
-                table.insert(out, file:sub(pos + 1, start - 1))
+                local char = file:sub(pos, pos)
+                if char == '/' or char == '\\' then
+                    table.insert(out, file:sub(pos + 1, start - 1))
+                    break
+                end
             end
         end
     end
@@ -182,15 +165,6 @@ local function getPositionOnScreen(Vector)
     return Vector2.new(Vec3.X, Vec3.Y), OnScreen
 end
 
-local function ValidateArguments(Args, RayMethod)
-    local Matches = 0
-    if #Args < RayMethod.ArgCountRequired then return false end
-    for Pos, Argument in next, Args do
-        if typeof(Argument) == RayMethod.Args[Pos] then Matches = Matches + 1 end
-    end
-    return Matches >= RayMethod.ArgCountRequired
-end
-
 local function getDirection(Origin, Position)
     return (Position - Origin).Unit * 1000
 end
@@ -211,18 +185,10 @@ local function IsPlayerVisible(Player)
 end
 
 local function getTeamColor(player)
-    local ok, color = pcall(function()
-        if player.Team and player.Team.TeamColor then
-            return player.Team.TeamColor.Color
-        end
-        local char = player.Character
-        if char then
-            local bc = char:FindFirstChildOfClass("BodyColors")
-            if bc then return bc.HeadColor3 end
-        end
-        return Color3.fromRGB(255, 182, 193)
-    end)
-    return (ok and color) or Color3.fromRGB(255, 182, 193)
+    if player.Team and player.Team.TeamColor then
+        return player.Team.TeamColor.Color
+    end
+    return Theme.ACCENT_PRIMARY
 end
 
 local function matchesTeam(Player)
@@ -252,7 +218,7 @@ local function getClosestPlayer()
         if not OnScreen then continue end
         local Distance = (getMousePosition() - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or SilentAimSettings.FOVRadius or 2000) then
-            Closest = ((SilentAimSettings.TargetPart == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[SilentAimSettings.TargetPart])
+            Closest = Character[SilentAimSettings.TargetPart]
             DistanceToMouse = Distance
         end
     end
@@ -262,24 +228,10 @@ end
 -- ============ ESP SYSTEM ============
 local espCache = {}
 local lastESPUpdate = 0
-local lastHighlightUpdate = 0
-local lastLockCheck = 0
-local cachedLockedChar = nil
-
-local function isLockedChar(char)
-    local now = tick()
-    if now - lastLockCheck >= 0.1 then
-        lastLockCheck = now
-        local cur = getClosestPlayer()
-        cachedLockedChar = (cur and cur.Parent) or nil
-    end
-    return cachedLockedChar == char
-end
 
 local function newESP(player)
     return {
         name = Drawing.new("Text"),
-        hpBack = Drawing.new("Line"),
         hpBar = Drawing.new("Line"),
         trace = Drawing.new("Line"),
     }
@@ -302,9 +254,6 @@ local function updateESP()
     if now - lastESPUpdate < 0.033 then return end
     lastESPUpdate = now
 
-    local canUpdateHighlight = (now - lastHighlightUpdate) >= 0.1
-    if canUpdateHighlight then lastHighlightUpdate = now end
-
     local camPos = Camera.CFrame.Position
 
     for _, player in ipairs(GetPlayers(Players)) do
@@ -316,14 +265,14 @@ local function updateESP()
             continue
         end
 
-        local hrp = FindFirstChild(char, "HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum then
+        if not SilentAimSettings.ESP_Enabled then
             if espCache[player] then clearESP(player) end
             continue
         end
 
-        if not SilentAimSettings.ESP_Enabled then
+        local hrp = FindFirstChild(char, "HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then
             if espCache[player] then clearESP(player) end
             continue
         end
@@ -356,15 +305,12 @@ local function updateESP()
         if SilentAimSettings.ESP_Health then
             local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
             local topY = screenHead.Y - 32
-            d.hpBack.Visible = true
             d.hpBar.Visible = true
-            d.hpBack.From = Vector2.new(screenHead.X - 28, topY)
-            d.hpBack.To = Vector2.new(screenHead.X + 28, topY)
             d.hpBar.From = Vector2.new(screenHead.X - 28, topY)
             d.hpBar.To = Vector2.new(screenHead.X - 28 + 56 * pct, topY)
             d.hpBar.Color = SilentAimSettings.ESP_HPColor
+            d.hpBar.Thickness = 3
         else
-            d.hpBack.Visible = false
             d.hpBar.Visible = false
         end
 
@@ -372,12 +318,13 @@ local function updateESP()
             d.trace.Visible = true
             d.trace.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
             d.trace.To = Vector2.new(screenHead.X, screenHead.Y)
-            d.trace.Color = SilentAimSettings.ESP_Team and getTeamColor(player) or SilentAimSettings.ESP_TraceColor
+            d.trace.Color = SilentAimSettings.ESP_Team and getTeamColor(player) or Theme.ACCENT_PRIMARY
+            d.trace.Thickness = 1
         else
             d.trace.Visible = false
         end
 
-        if canUpdateHighlight and SilentAimSettings.ESP_Highlight then
+        if SilentAimSettings.ESP_Highlight then
             local hl = char:FindFirstChild("SpentHubHL")
             if not hl then
                 hl = Instance.new("Highlight")
@@ -388,335 +335,830 @@ local function updateESP()
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 hl.Parent = char
             end
-            hl.OutlineColor = isLockedChar(char) and TARGET_LOCK_COLOR or (SilentAimSettings.ESP_Team and getTeamColor(player) or SilentAimSettings.ESP_HighlightColor)
+            hl.OutlineColor = SilentAimSettings.ESP_Team and getTeamColor(player) or SilentAimSettings.ESP_HighlightColor
         end
     end
 end
 
--- ============ CREATE WINDOW ============
-local Window = Obsidian:CreateWindow({
-    Name = "SPENT HUB v15",
-    LoadingTitle = "SPENT HUB",
-    LoadingSubtitle = "Professional Silent Aim",
+-- ============ CREATE PREMIUM GUI ============
+local gui = Instance.new("ScreenGui")
+gui.Name = "SpentHubPremium"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+gui.ZIndex = 100
+
+-- Main window with glassmorphism
+local mainWindow = Instance.new("Frame", gui)
+mainWindow.Name = "MainWindow"
+mainWindow.Size = UDim2.new(0, 1000, 0, 700)
+mainWindow.Position = UDim2.new(0.5, -500, 0.5, -350)
+mainWindow.BackgroundColor3 = Theme.BG_PRIMARY
+mainWindow.BackgroundTransparency = 0.15
+mainWindow.BorderSizePixel = 0
+mainWindow.Draggable = true
+mainWindow.Active = true
+
+local mainCorner = Instance.new("UICorner", mainWindow)
+mainCorner.CornerRadius = UDim.new(0, 20)
+
+local mainStroke = Instance.new("UIStroke", mainWindow)
+mainStroke.Color = Theme.BORDER
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0.5
+
+-- Soft glow/shadow
+local shadowBlur = Instance.new("TextLabel", mainWindow)
+shadowBlur.Size = UDim2.new(1, 20, 1, 20)
+shadowBlur.Position = UDim2.new(0, -10, 0, -10)
+shadowBlur.BackgroundColor3 = Theme.ACCENT_PRIMARY
+shadowBlur.BackgroundTransparency = 0.95
+shadowBlur.BorderSizePixel = 0
+shadowBlur.Text = ""
+shadowBlur.ZIndex = -1
+
+Instance.new("UICorner", shadowBlur).CornerRadius = UDim.new(0, 30)
+
+-- Animated gradient
+local gradientBG = Instance.new("UIGradient", mainWindow)
+gradientBG.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Theme.BG_PRIMARY),
+    ColorSequenceKeypoint.new(0.5, Theme.BG_SECONDARY),
+    ColorSequenceKeypoint.new(1, Theme.BG_PRIMARY),
 })
+gradientBG.Rotation = 45
 
--- ============ MAIN TAB ============
-local MainTab = Window:AddTab("Main")
+-- Title bar with glow
+local titleBar = Instance.new("Frame", mainWindow)
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 70)
+titleBar.BackgroundColor3 = Theme.BG_SECONDARY
+titleBar.BackgroundTransparency = 0.3
+titleBar.BorderSizePixel = 0
 
-MainTab:AddSection("SILENT AIM")
-MainTab:AddToggle("MasterEnable", {
-    Name = "Enabled",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.Enabled = Value
-        mouse_box.Visible = Value
-    end,
-})
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 20)
 
-MainTab:AddDropdown("TargetPart", {
-    Name = "Target Part",
-    Options = {"Head", "HumanoidRootPart", "Random"},
-    CurrentOption = {"HumanoidRootPart"},
-    Callback = function(Option)
-        SilentAimSettings.TargetPart = Option[1]
-    end,
-})
+local titleGlow = Instance.new("TextLabel", titleBar)
+titleGlow.Size = UDim2.new(1, 0, 1, 0)
+titleGlow.BackgroundColor3 = Theme.ACCENT_PRIMARY
+titleGlow.BackgroundTransparency = 0.95
+titleGlow.BorderSizePixel = 0
+titleGlow.Text = ""
+titleGlow.ZIndex = 0
 
-MainTab:AddDropdown("Method", {
-    Name = "Aiming Method",
-    Options = {"Raycast", "FindPartOnRay", "FindPartOnRayWithWhitelist", "FindPartOnRayWithIgnoreList", "Mouse.Hit/Target"},
-    CurrentOption = {"Raycast"},
-    Callback = function(Option)
-        SilentAimSettings.SilentAimMethod = Option[1]
-    end,
-})
+Instance.new("UICorner", titleGlow).CornerRadius = UDim.new(0, 20)
 
-MainTab:AddSlider("HitChance", {
-    Name = "Hit Chance",
-    Min = 0,
-    Max = 100,
-    Increment = 1,
-    Suffix = "%",
-    CurrentValue = 100,
-    Callback = function(Value)
-        SilentAimSettings.HitChance = Value
-    end,
-})
+local titleText = Instance.new("TextLabel", titleBar)
+titleText.Size = UDim2.new(0.6, 0, 1, 0)
+titleText.Position = UDim2.new(0, 20, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "SPENT HUB"
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 28
+titleText.TextColor3 = Theme.ACCENT_PRIMARY
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.ZIndex = 10
 
-MainTab:AddSection("FILTERS")
-MainTab:AddToggle("TeamCheck", {
-    Name = "Team Check",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.TeamCheck = Value
-    end,
-})
+local subtitleText = Instance.new("TextLabel", titleBar)
+subtitleText.Size = UDim2.new(0.6, 0, 0.4, 0)
+subtitleText.Position = UDim2.new(0, 20, 0.5, 0)
+subtitleText.BackgroundTransparency = 1
+subtitleText.Text = "Premium Silent Aim Suite v15"
+subtitleText.Font = Enum.Font.Gotham
+subtitleText.TextSize = 13
+subtitleText.TextColor3 = Theme.TEXT_SECONDARY
+subtitleText.TextXAlignment = Enum.TextXAlignment.Left
+subtitleText.ZIndex = 10
 
-MainTab:AddToggle("VisibleCheck", {
-    Name = "Visible Check",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.VisibleCheck = Value
-    end,
-})
+-- Close button with glow
+local closeBtn = Instance.new("TextButton", titleBar)
+closeBtn.Name = "CloseBtn"
+closeBtn.Size = UDim2.new(0, 40, 0, 40)
+closeBtn.Position = UDim2.new(1, -60, 0.5, -20)
+closeBtn.BackgroundColor3 = Theme.BG_TERTIARY
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "×"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 28
+closeBtn.TextColor3 = Theme.TEXT_PRIMARY
+closeBtn.ZIndex = 11
 
-MainTab:AddSection("TARGET TEAMS")
-MainTab:AddToggle("TargetCop", {
-    Name = "Target Guards",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.TargetCop = Value
-    end,
-})
+local closeCorner = Instance.new("UICorner", closeBtn)
+closeCorner.CornerRadius = UDim.new(0, 10)
 
-MainTab:AddToggle("TargetInmate", {
-    Name = "Target Inmates",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.TargetInmate = Value
-    end,
-})
+local closeGlow = Instance.new("UIStroke", closeBtn)
+closeGlow.Color = Theme.ACCENT_PRIMARY
+closeGlow.Thickness = 2
+closeGlow.Transparency = 1
 
-MainTab:AddToggle("TargetCriminal", {
-    Name = "Target Criminals",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.TargetCriminal = Value
-    end,
-})
+-- Close button hover
+closeBtn.MouseEnter:Connect(function()
+    TweenService:Create(closeBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundColor3 = Theme.BG_HOVER,
+        Size = UDim2.new(0, 44, 0, 44),
+        Position = UDim2.new(1, -62, 0.5, -22)
+    }):Play()
+    TweenService:Create(closeGlow, TweenInfo.new(0.2), {Transparency = 0.3}):Play()
+end)
 
--- ============ ADVANCED TAB ============
-local AdvTab = Window:AddTab("Advanced")
+closeBtn.MouseLeave:Connect(function()
+    TweenService:Create(closeBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundColor3 = Theme.BG_TERTIARY,
+        Size = UDim2.new(0, 40, 0, 40),
+        Position = UDim2.new(1, -60, 0.5, -20)
+    }):Play()
+    TweenService:Create(closeGlow, TweenInfo.new(0.2), {Transparency = 1}):Play()
+end)
 
-AdvTab:AddSection("PREDICTION")
-AdvTab:AddToggle("Prediction", {
-    Name = "Enable Prediction",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.MouseHitPrediction = Value
-    end,
-})
+closeBtn.MouseButton1Click:Connect(function()
+    TweenService:Create(mainWindow, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Position = UDim2.new(0.5, -500, 1.5, 0),
+        BackgroundTransparency = 1
+    }):Play()
+    task.wait(0.3)
+    mainWindow.Visible = false
+end)
 
-AdvTab:AddSlider("PredictionAmount", {
-    Name = "Prediction Amount",
-    Min = 50,
-    Max = 500,
-    Increment = 1,
-    Suffix = "x1000",
-    CurrentValue = 165,
-    Callback = function(Value)
-        SilentAimSettings.MouseHitPredictionAmount = Value / 1000
-        PredictionAmount = Value / 1000
-    end,
-})
+-- Animated separator line
+local separatorLine = Instance.new("Frame", titleBar)
+separatorLine.Size = UDim2.new(0, 0, 0, 2)
+separatorLine.Position = UDim2.new(0, 20, 1, -2)
+separatorLine.BackgroundColor3 = Theme.ACCENT_PRIMARY
+separatorLine.BorderSizePixel = 0
+separatorLine.BackgroundTransparency = 0
 
--- ============ ESP TAB ============
-local ESPTab = Window:AddTab("ESP")
+TweenService:Create(separatorLine, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    Size = UDim2.new(0, 200, 0, 2)
+}):Play()
 
-ESPTab:AddSection("ESP CORE")
-ESPTab:AddToggle("EnableESP", {
-    Name = "Enable ESP",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Enabled = Value
-    end,
-})
+-- Tab system with animated underline
+local tabContainer = Instance.new("Frame", mainWindow)
+tabContainer.Name = "TabContainer"
+tabContainer.Size = UDim2.new(0, 200, 1, -70)
+tabContainer.Position = UDim2.new(0, 0, 0, 70)
+tabContainer.BackgroundColor3 = Theme.BG_SECONDARY
+tabContainer.BackgroundTransparency = 0.2
+tabContainer.BorderSizePixel = 0
 
-ESPTab:AddToggle("TeamColors", {
-    Name = "Team Colors",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Team = Value
-    end,
-})
+local tabScroll = Instance.new("ScrollingFrame", tabContainer)
+tabScroll.Size = UDim2.new(1, 0, 1, 0)
+tabScroll.BackgroundTransparency = 1
+tabScroll.ScrollBarThickness = 3
+tabScroll.ScrollBarImageColor3 = Theme.ACCENT_PRIMARY
 
-ESPTab:AddSection("ELEMENTS")
-ESPTab:AddToggle("Highlight", {
-    Name = "Highlight",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Highlight = Value
-    end,
-})
+local tabLayout = Instance.new("UIListLayout", tabScroll)
+tabLayout.Padding = UDim.new(0, 5)
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-ESPTab:AddToggle("Names", {
-    Name = "Names",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Name = Value
-    end,
-})
+local tabPadding = Instance.new("UIPadding", tabScroll)
+tabPadding.PaddingLeft = UDim.new(0, 10)
+tabPadding.PaddingRight = UDim.new(0, 10)
+tabPadding.PaddingTop = UDim.new(0, 10)
 
-ESPTab:AddToggle("HealthBars", {
-    Name = "Health Bars",
-    CurrentValue = true,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Health = Value
-    end,
-})
+-- Content area
+local contentArea = Instance.new("Frame", mainWindow)
+contentArea.Name = "ContentArea"
+contentArea.Size = UDim2.new(1, -200, 1, -70)
+contentArea.Position = UDim2.new(0, 200, 0, 70)
+contentArea.BackgroundColor3 = Theme.BG_PRIMARY
+contentArea.BackgroundTransparency = 0.5
+contentArea.BorderSizePixel = 0
 
-ESPTab:AddToggle("Tracers", {
-    Name = "Tracers",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.ESP_Trace = Value
-    end,
-})
+local contentScroll = Instance.new("ScrollingFrame", contentArea)
+contentScroll.Size = UDim2.new(1, 0, 1, 0)
+contentScroll.BackgroundTransparency = 1
+contentScroll.ScrollBarThickness = 4
+contentScroll.ScrollBarImageColor3 = Theme.ACCENT_PRIMARY
+contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
-ESPTab:AddSection("RANGE")
-ESPTab:AddSlider("MaxDistance", {
-    Name = "Max Distance",
-    Min = 100,
-    Max = 3000,
-    Increment = 50,
-    Suffix = "studs",
-    CurrentValue = 1500,
-    Callback = function(Value)
-        SilentAimSettings.ESP_MaxDistance = Value
-    end,
-})
+local contentLayout = Instance.new("UIListLayout", contentScroll)
+contentLayout.Padding = UDim.new(0, 15)
+contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- ============ VISUALS TAB ============
-local VisualsTab = Window:AddTab("Visuals")
+local contentPadding = Instance.new("UIPadding", contentScroll)
+contentPadding.PaddingLeft = UDim.new(0, 20)
+contentPadding.PaddingRight = UDim.new(0, 20)
+contentPadding.PaddingTop = UDim.new(0, 20)
+contentPadding.PaddingBottom = UDim.new(0, 20)
 
-VisualsTab:AddSection("FOV CIRCLE")
-VisualsTab:AddToggle("FOVCircle", {
-    Name = "Show FOV",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.FOVVisible = Value
-        fov_circle.Visible = Value
-    end,
-})
+-- ============ CONTROL CREATION HELPERS ============
+local currentTab = nil
+local tabs = {}
 
-VisualsTab:AddSlider("FOVRadius", {
-    Name = "FOV Radius",
-    Min = 0,
-    Max = 400,
-    Increment = 10,
-    Suffix = "px",
-    CurrentValue = 130,
-    Callback = function(Value)
-        SilentAimSettings.FOVRadius = Value
-        fov_circle.Radius = Value
-    end,
-})
+local function createTab(name, displayName, icon)
+    local tabBtn = Instance.new("TextButton", tabScroll)
+    tabBtn.Name = name
+    tabBtn.Size = UDim2.new(1, 0, 0, 50)
+    tabBtn.BackgroundColor3 = Theme.BG_TERTIARY
+    tabBtn.BorderSizePixel = 0
+    tabBtn.Text = icon .. " " .. displayName
+    tabBtn.Font = Enum.Font.GothamMedium
+    tabBtn.TextSize = 13
+    tabBtn.TextColor3 = Theme.TEXT_SECONDARY
+    tabBtn.AutoButtonColor = false
 
-VisualsTab:AddToggle("TargetBox", {
-    Name = "Target Box",
-    CurrentValue = false,
-    Callback = function(Value)
-        SilentAimSettings.ShowSilentAimTarget = Value
-    end,
-})
+    local tabCorner = Instance.new("UICorner", tabBtn)
+    tabCorner.CornerRadius = UDim.new(0, 10)
 
-VisualsTab:AddSection("THEME")
-VisualsTab:AddButton("Pink", function()
+    local tabGlow = Instance.new("UIStroke", tabBtn)
+    tabGlow.Color = Theme.ACCENT_PRIMARY
+    tabGlow.Thickness = 2
+    tabGlow.Transparency = 1
+
+    local tab = {
+        button = tabBtn,
+        content = {},
+        isActive = false
+    }
+    tabs[name] = tab
+
+    tabBtn.MouseButton1Click:Connect(function()
+        if currentTab then
+            TweenService:Create(currentTab.button, TweenInfo.new(0.2), {
+                BackgroundColor3 = Theme.BG_TERTIARY,
+                TextColor3 = Theme.TEXT_SECONDARY
+            }):Play()
+            TweenService:Create(currentTab.button:FindFirstChildOfClass("UIStroke"), TweenInfo.new(0.2), {Transparency = 1}):Play()
+            
+            for _, element in ipairs(currentTab.content) do
+                TweenService:Create(element, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Position = element.Position + UDim2.new(-0.1, 0, 0, 0),
+                    BackgroundTransparency = 1
+                }):Play()
+                task.wait(0.05)
+                element.Visible = false
+            end
+            currentTab.isActive = false
+        end
+
+        currentTab = tab
+        TweenService:Create(tabBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Theme.ACCENT_PRIMARY,
+            TextColor3 = Theme.BG_PRIMARY
+        }):Play()
+        TweenService:Create(tabGlow, TweenInfo.new(0.2), {Transparency = 0.3}):Play()
+        
+        for i, element in ipairs(tab.content) do
+            element.Visible = true
+            element.Position = element.Position - UDim2.new(0.1, 0, 0, 0)
+            TweenService:Create(element, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = element.Position + UDim2.new(0.1, 0, 0, 0),
+                BackgroundTransparency = 0.1
+            }):Play()
+            task.wait(0.03)
+        end
+        tab.isActive = true
+    end)
+
+    tabBtn.MouseEnter:Connect(function()
+        if not tab.isActive then
+            TweenService:Create(tabBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_HOVER}):Play()
+        end
+    end)
+
+    tabBtn.MouseLeave:Connect(function()
+        if not tab.isActive then
+            TweenService:Create(tabBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_TERTIARY}):Play()
+        end
+    end)
+
+    return tab
+end
+
+local function addGroupLabel(tab, text)
+    local label = Instance.new("TextLabel", contentScroll)
+    label.Size = UDim2.new(1, -40, 0, 25)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.TextColor3 = Theme.ACCENT_PRIMARY
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Visible = false
+
+    table.insert(tab.content, label)
+    return label
+end
+
+local function addToggle(tab, text, default, callback)
+    local container = Instance.new("Frame", contentScroll)
+    container.Size = UDim2.new(1, -40, 0, 45)
+    container.BackgroundColor3 = Theme.BG_TERTIARY
+    container.BackgroundTransparency = 0.1
+    container.BorderSizePixel = 0
+    container.Visible = false
+
+    local containerCorner = Instance.new("UICorner", container)
+    containerCorner.CornerRadius = UDim.new(0, 12)
+
+    local containerStroke = Instance.new("UIStroke", container)
+    containerStroke.Color = Theme.BORDER
+    containerStroke.Thickness = 1
+    containerStroke.Transparency = 0.5
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 15, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
+    label.TextColor3 = Theme.TEXT_PRIMARY
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toggleBtn = Instance.new("Frame", container)
+    toggleBtn.Size = UDim2.new(0, 50, 0, 26)
+    toggleBtn.Position = UDim2.new(1, -65, 0.5, -13)
+    toggleBtn.BackgroundColor3 = default and Theme.ACCENT_PRIMARY or Color3.fromRGB(45, 45, 60)
+    toggleBtn.BorderSizePixel = 0
+
+    local toggleCorner = Instance.new("UICorner", toggleBtn)
+    toggleCorner.CornerRadius = UDim.new(1, 0)
+
+    local toggleGlow = Instance.new("UIStroke", toggleBtn)
+    toggleGlow.Color = Theme.ACCENT_PRIMARY
+    toggleGlow.Thickness = 2
+    toggleGlow.Transparency = default and 0.4 or 1
+
+    local toggleDot = Instance.new("Frame", toggleBtn)
+    toggleDot.Size = UDim2.new(0, 22, 0, 22)
+    toggleDot.Position = default and UDim2.new(1, -24, 0.5, -11) or UDim2.new(0, 2, 0.5, -11)
+    toggleDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    toggleDot.BorderSizePixel = 0
+
+    local toggleDotCorner = Instance.new("UICorner", toggleDot)
+    toggleDotCorner.CornerRadius = UDim.new(1, 0)
+
+    local state = default
+    local toggleInput = Instance.new("TextButton", container)
+    toggleInput.Size = UDim2.new(0, 50, 0, 26)
+    toggleInput.Position = toggleBtn.Position
+    toggleInput.BackgroundTransparency = 1
+    toggleInput.Text = ""
+    toggleInput.ZIndex = 10
+
+    toggleInput.MouseButton1Click:Connect(function()
+        state = not state
+        TweenService:Create(toggleDot, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = state and UDim2.new(1, -24, 0.5, -11) or UDim2.new(0, 2, 0.5, -11)
+        }):Play()
+        TweenService:Create(toggleBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = state and Theme.ACCENT_PRIMARY or Color3.fromRGB(45, 45, 60)
+        }):Play()
+        TweenService:Create(toggleGlow, TweenInfo.new(0.2), {Transparency = state and 0.4 or 1}):Play()
+        callback(state)
+    end)
+
+    container.MouseEnter:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+    end)
+
+    container.MouseLeave:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0.5}):Play()
+    end)
+
+    table.insert(tab.content, container)
+    return container
+end
+
+local function addSlider(tab, text, min, max, default, callback)
+    local container = Instance.new("Frame", contentScroll)
+    container.Size = UDim2.new(1, -40, 0, 70)
+    container.BackgroundColor3 = Theme.BG_TERTIARY
+    container.BackgroundTransparency = 0.1
+    container.BorderSizePixel = 0
+    container.Visible = false
+
+    local containerCorner = Instance.new("UICorner", container)
+    containerCorner.CornerRadius = UDim.new(0, 12)
+
+    local containerStroke = Instance.new("UIStroke", container)
+    containerStroke.Color = Theme.BORDER
+    containerStroke.Thickness = 1
+    containerStroke.Transparency = 0.5
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(1, -30, 0, 20)
+    label.Position = UDim2.new(0, 15, 0, 8)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. default
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 12
+    label.TextColor3 = Theme.TEXT_PRIMARY
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local barBG = Instance.new("Frame", container)
+    barBG.Size = UDim2.new(1, -30, 0, 8)
+    barBG.Position = UDim2.new(0, 15, 0, 38)
+    barBG.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    barBG.BorderSizePixel = 0
+
+    local barCorner = Instance.new("UICorner", barBG)
+    barCorner.CornerRadius = UDim.new(1, 0)
+
+    local barFill = Instance.new("Frame", barBG)
+    barFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    barFill.BackgroundColor3 = Theme.ACCENT_PRIMARY
+    barFill.BorderSizePixel = 0
+
+    local barFillCorner = Instance.new("UICorner", barFill)
+    barFillCorner.CornerRadius = UDim.new(1, 0)
+
+    local barGlow = Instance.new("UIStroke", barFill)
+    barGlow.Color = Theme.ACCENT_PRIMARY
+    barGlow.Thickness = 1
+    barGlow.Transparency = 0.5
+
+    local dragging = false
+    barBG.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local rel = math.clamp((input.Position.X - barBG.AbsolutePosition.X) / barBG.AbsoluteSize.X, 0, 1)
+            local val = math.floor(min + (max - min) * rel)
+            barFill.Size = UDim2.new(rel, 0, 1, 0)
+            label.Text = text .. ": " .. val
+            callback(val)
+        end
+    end)
+
+    container.MouseEnter:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+    end)
+
+    container.MouseLeave:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0.5}):Play()
+    end)
+
+    table.insert(tab.content, container)
+    return container
+end
+
+local function addDropdown(tab, text, options, default, callback)
+    local container = Instance.new("Frame", contentScroll)
+    container.Size = UDim2.new(1, -40, 0, 45)
+    container.BackgroundColor3 = Theme.BG_TERTIARY
+    container.BackgroundTransparency = 0.1
+    container.BorderSizePixel = 0
+    container.Visible = false
+
+    local containerCorner = Instance.new("UICorner", container)
+    containerCorner.CornerRadius = UDim.new(0, 12)
+
+    local containerStroke = Instance.new("UIStroke", container)
+    containerStroke.Color = Theme.BORDER
+    containerStroke.Thickness = 1
+    containerStroke.Transparency = 0.5
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(0.5, 0, 1, 0)
+    label.Position = UDim2.new(0, 15, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
+    label.TextColor3 = Theme.TEXT_PRIMARY
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local dropdownBtn = Instance.new("TextButton", container)
+    dropdownBtn.Size = UDim2.new(0, 140, 0, 32)
+    dropdownBtn.Position = UDim2.new(1, -155, 0.5, -16)
+    dropdownBtn.BackgroundColor3 = Theme.BG_PRIMARY
+    dropdownBtn.BorderSizePixel = 0
+    dropdownBtn.Text = default
+    dropdownBtn.Font = Enum.Font.GothamMedium
+    dropdownBtn.TextSize = 12
+    dropdownBtn.TextColor3 = Theme.ACCENT_PRIMARY
+    dropdownBtn.AutoButtonColor = false
+
+    local dropdownCorner = Instance.new("UICorner", dropdownBtn)
+    dropdownCorner.CornerRadius = UDim.new(0, 8)
+
+    local dropdownStroke = Instance.new("UIStroke", dropdownBtn)
+    dropdownStroke.Color = Theme.ACCENT_PRIMARY
+    dropdownStroke.Thickness = 1
+    dropdownStroke.Transparency = 0.5
+
+    local idx = 1
+    for i, v in ipairs(options) do if v == default then idx = i break end end
+
+    dropdownBtn.MouseButton1Click:Connect(function()
+        idx = idx + 1
+        if idx > #options then idx = 1 end
+        dropdownBtn.Text = options[idx]
+        TweenService:Create(dropdownBtn, TweenInfo.new(0.1), {TextTransparency = 0.5}):Play()
+        task.wait(0.05)
+        TweenService:Create(dropdownBtn, TweenInfo.new(0.1), {TextTransparency = 0}):Play()
+        callback(options[idx])
+    end)
+
+    dropdownBtn.MouseEnter:Connect(function()
+        TweenService:Create(dropdownBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_HOVER}):Play()
+        TweenService:Create(dropdownStroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+    end)
+
+    dropdownBtn.MouseLeave:Connect(function()
+        TweenService:Create(dropdownBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_PRIMARY}):Play()
+        TweenService:Create(dropdownStroke, TweenInfo.new(0.15), {Transparency = 0.5}):Play()
+    end)
+
+    container.MouseEnter:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+    end)
+
+    container.MouseLeave:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
+        TweenService:Create(containerStroke, TweenInfo.new(0.15), {Transparency = 0.5}):Play()
+    end)
+
+    table.insert(tab.content, container)
+    return container
+end
+
+local function addButton(tab, text, callback, style)
+    local container = Instance.new("TextButton", contentScroll)
+    container.Size = UDim2.new(1, -40, 0, 45)
+    container.BackgroundColor3 = style == "danger" and Color3.fromRGB(200, 80, 80) or Theme.ACCENT_PRIMARY
+    container.BorderSizePixel = 0
+    container.Text = text
+    container.Font = Enum.Font.GothamBold
+    container.TextSize = 13
+    container.TextColor3 = Theme.BG_PRIMARY
+    container.AutoButtonColor = false
+    container.Visible = false
+
+    local containerCorner = Instance.new("UICorner", container)
+    containerCorner.CornerRadius = UDim.new(0, 12)
+
+    local containerStroke = Instance.new("UIStroke", container)
+    containerStroke.Color = container.BackgroundColor3
+    containerStroke.Thickness = 2
+    containerStroke.Transparency = 0.5
+
+    local containerGlow = Instance.new("UIStroke", container)
+    containerGlow.Color = container.BackgroundColor3
+    containerGlow.Thickness = 6
+    containerGlow.Transparency = 0.8
+
+    container.MouseButton1Click:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(1, -40, 0, 42)
+        }):Play()
+        task.wait(0.1)
+        TweenService:Create(container, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(1, -40, 0, 45)
+        }):Play()
+        callback()
+    end)
+
+    container.MouseEnter:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
+        TweenService:Create(containerGlow, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
+    end)
+
+    container.MouseLeave:Connect(function()
+        TweenService:Create(container, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(containerGlow, TweenInfo.new(0.2), {Transparency = 0.8}):Play()
+    end)
+
+    table.insert(tab.content, container)
+    return container
+end
+
+-- ============ BUILD TABS ============
+local MainTab = createTab("Main", "Silent Aim", "🎯")
+addGroupLabel(MainTab, "CORE FEATURES")
+addToggle(MainTab, "Master Enable", false, function(v)
+    SilentAimSettings.Enabled = v
+    mouse_box.Visible = v
+end)
+
+addDropdown(MainTab, "Target Part", {"Head", "HumanoidRootPart", "Random"}, "HumanoidRootPart", function(v)
+    SilentAimSettings.TargetPart = v
+end)
+
+addDropdown(MainTab, "Aiming Method", {"Raycast", "FindPartOnRay", "FindPartOnRayWithWhitelist", "FindPartOnRayWithIgnoreList", "Mouse.Hit/Target"}, "Raycast", function(v)
+    SilentAimSettings.SilentAimMethod = v
+end)
+
+addSlider(MainTab, "Hit Chance", 0, 100, 100, function(v)
+    SilentAimSettings.HitChance = v
+end)
+
+addGroupLabel(MainTab, "FILTERS")
+addToggle(MainTab, "Team Check", false, function(v)
+    SilentAimSettings.TeamCheck = v
+end)
+
+addToggle(MainTab, "Visible Check", false, function(v)
+    SilentAimSettings.VisibleCheck = v
+end)
+
+addGroupLabel(MainTab, "TARGET TEAMS")
+addToggle(MainTab, "Target Guards", true, function(v)
+    SilentAimSettings.TargetCop = v
+end)
+
+addToggle(MainTab, "Target Inmates", true, function(v)
+    SilentAimSettings.TargetInmate = v
+end)
+
+addToggle(MainTab, "Target Criminals", true, function(v)
+    SilentAimSettings.TargetCriminal = v
+end)
+
+-- Advanced Tab
+local AdvancedTab = createTab("Advanced", "Advanced", "⚙️")
+addGroupLabel(AdvancedTab, "PREDICTION")
+addToggle(AdvancedTab, "Enable Prediction", false, function(v)
+    SilentAimSettings.MouseHitPrediction = v
+end)
+
+addSlider(AdvancedTab, "Prediction Amount", 50, 500, 165, function(v)
+    SilentAimSettings.MouseHitPredictionAmount = v / 1000
+    PredictionAmount = v / 1000
+end)
+
+-- ESP Tab
+local ESPTab = createTab("ESP", "ESP", "👁️")
+addGroupLabel(ESPTab, "ESP CORE")
+addToggle(ESPTab, "Enable ESP", false, function(v)
+    SilentAimSettings.ESP_Enabled = v
+end)
+
+addToggle(ESPTab, "Team Colors", false, function(v)
+    SilentAimSettings.ESP_Team = v
+end)
+
+addGroupLabel(ESPTab, "ELEMENTS")
+addToggle(ESPTab, "Highlight", true, function(v)
+    SilentAimSettings.ESP_Highlight = v
+end)
+
+addToggle(ESPTab, "Names", true, function(v)
+    SilentAimSettings.ESP_Name = v
+end)
+
+addToggle(ESPTab, "Health Bars", true, function(v)
+    SilentAimSettings.ESP_Health = v
+end)
+
+addToggle(ESPTab, "Tracers", false, function(v)
+    SilentAimSettings.ESP_Trace = v
+end)
+
+addSlider(ESPTab, "Max Distance", 100, 3000, 1500, function(v)
+    SilentAimSettings.ESP_MaxDistance = v
+end)
+
+-- Visuals Tab
+local VisualsTab = createTab("Visuals", "Visuals", "🎨")
+addGroupLabel(VisualsTab, "FOV CIRCLE")
+addToggle(VisualsTab, "Show FOV", false, function(v)
+    SilentAimSettings.FOVVisible = v
+    fov_circle.Visible = v
+end)
+
+addSlider(VisualsTab, "FOV Radius", 0, 400, 130, function(v)
+    SilentAimSettings.FOVRadius = v
+    fov_circle.Radius = v
+end)
+
+addToggle(VisualsTab, "Target Box", false, function(v)
+    SilentAimSettings.ShowSilentAimTarget = v
+end)
+
+addGroupLabel(VisualsTab, "THEME COLORS")
+addButton(VisualsTab, "💗 Pink", function()
     mouse_box.Color = Color3.fromRGB(255, 182, 193)
     fov_circle.Color = Color3.fromRGB(255, 182, 193)
 end)
 
-VisualsTab:AddButton("Blue", function()
+addButton(VisualsTab, "💙 Blue", function()
     mouse_box.Color = Color3.fromRGB(140, 180, 255)
     fov_circle.Color = Color3.fromRGB(140, 180, 255)
 end)
 
-VisualsTab:AddButton("Green", function()
+addButton(VisualsTab, "💚 Green", function()
     mouse_box.Color = Color3.fromRGB(140, 255, 180)
     fov_circle.Color = Color3.fromRGB(140, 255, 180)
 end)
 
-VisualsTab:AddButton("Purple", function()
+addButton(VisualsTab, "💜 Purple", function()
     mouse_box.Color = Color3.fromRGB(200, 140, 255)
     fov_circle.Color = Color3.fromRGB(200, 140, 255)
 end)
 
-VisualsTab:AddButton("White", function()
+addButton(VisualsTab, "⚪ White", function()
     mouse_box.Color = Color3.fromRGB(255, 255, 255)
     fov_circle.Color = Color3.fromRGB(255, 255, 255)
 end)
 
--- ============ SETTINGS TAB ============
-local SettingsTab = Window:AddTab("Settings")
+-- Settings Tab
+local SettingsTab = createTab("Settings", "Settings", "⚡")
+addGroupLabel(SettingsTab, "CONFIGURATION")
 
-SettingsTab:AddSection("SAVE/LOAD")
-SettingsTab:AddInput("ConfigName", {
-    Name = "Config Name",
-    CurrentValue = "",
-    PlaceHolder = "Enter name",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Value)
-        FileToSave = Value
-    end,
-})
+local fileInput = Instance.new("TextBox", contentScroll)
+fileInput.Size = UDim2.new(1, -40, 0, 45)
+fileInput.Position = UDim2.new(0, 0, 0, 0)
+fileInput.BackgroundColor3 = Theme.BG_TERTIARY
+fileInput.BackgroundTransparency = 0.1
+fileInput.BorderSizePixel = 0
+fileInput.PlaceholderText = "Config name..."
+fileInput.PlaceholderColor3 = Theme.TEXT_TERTIARY
+fileInput.TextColor3 = Theme.TEXT_PRIMARY
+fileInput.Font = Enum.Font.Gotham
+fileInput.TextSize = 13
+fileInput.Visible = false
 
-SettingsTab:AddButton("Save Config", function()
+local fileInputCorner = Instance.new("UICorner", fileInput)
+fileInputCorner.CornerRadius = UDim.new(0, 12)
+
+local fileInputStroke = Instance.new("UIStroke", fileInput)
+fileInputStroke.Color = Theme.BORDER
+fileInputStroke.Thickness = 1
+fileInputStroke.Transparency = 0.5
+
+local filePadding = Instance.new("UIPadding", fileInput)
+filePadding.PaddingLeft = UDim.new(0, 15)
+
+fileInput.FocusLost:Connect(function()
+    FileToSave = fileInput.Text
+end)
+
+table.insert(SettingsTab.content, fileInput)
+
+addButton(SettingsTab, "💾 Save Config", function()
     if FileToSave and FileToSave ~= "" then
         UpdateFile(FileToSave)
         robloxNotify("SPENT HUB", "Saved: " .. FileToSave, 2)
-    else
-        robloxNotify("SPENT HUB", "Enter name", 1)
     end
 end)
 
-SettingsTab:AddSection("LOAD")
+addGroupLabel(SettingsTab, "LOAD CONFIGURATION")
 local files = GetFiles()
 if #files > 0 then
     for _, name in ipairs(files) do
-        SettingsTab:AddButton("Load: " .. name, function()
+        addButton(SettingsTab, "📥 " .. name, function()
             LoadFile(name)
             robloxNotify("SPENT HUB", "Loaded: " .. name, 2)
         end)
     end
 end
 
-SettingsTab:AddSection("INFO")
-SettingsTab:AddParagraph("SPENT HUB v15", "Professional Silent Aim Suite")
-SettingsTab:AddParagraph("Keybinds", "RAlt: Toggle\nRShift: GUI\nEND: Unload")
+-- Default to first tab
+if tabs["Main"] then
+    tabs["Main"].button:MouseButton1Click()
+end
 
--- ============ HOOKS ============
+-- ============ MAIN GAME HOOKS ============
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
     local Arguments = {...}
     local self = Arguments[1]
     local chance = CalculateChance(SilentAimSettings.HitChance)
-    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance == true then
+    
+    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance then
         if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
+            local A_Ray = Arguments[2]
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                return oldNamecall(unpack(Arguments))
             end
         elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
+            local A_Ray = Arguments[2]
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                return oldNamecall(unpack(Arguments))
             end
         elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
+            local A_Ray = Arguments[2]
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                return oldNamecall(unpack(Arguments))
             end
         elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
-                local A_Origin = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
-                    return oldNamecall(unpack(Arguments))
-                end
+            local A_Origin = Arguments[2]
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                return oldNamecall(unpack(Arguments))
             end
         end
     end
@@ -730,20 +1172,14 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
         if Index == "Target" or Index == "target" then
             return HitPart
         elseif Index == "Hit" or Index == "hit" then
-            return ((SilentAimSettings.MouseHitPrediction and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount))) or (not SilentAimSettings.MouseHitPrediction and HitPart.CFrame))
-        elseif Index == "X" or Index == "x" then
-            return self.X
-        elseif Index == "Y" or Index == "y" then
-            return self.Y
-        elseif Index == "UnitRay" then
-            return Ray.new(self.Origin, (self.Hit - self.Origin).Unit)
+            return SilentAimSettings.MouseHitPrediction and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount)) or HitPart.CFrame
         end
     end
     return oldIndex(self, Index)
 end))
 
--- ============ MAIN LOOP ============
-resume(create(function()
+-- Main loop
+coroutine.resume(coroutine.create(function()
     RenderStepped:Connect(function()
         local lockedTarget = getClosestPlayer()
 
@@ -761,7 +1197,7 @@ resume(create(function()
         if SilentAimSettings.FOVVisible then
             fov_circle.Visible = true
             fov_circle.Position = getMousePosition()
-            fov_circle.Color = lockedTarget and TARGET_LOCK_COLOR or RING_IDLE_COLOR
+            fov_circle.Color = lockedTarget and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(255, 255, 255)
         else
             fov_circle.Visible = false
         end
@@ -770,23 +1206,50 @@ resume(create(function()
     end)
 end))
 
--- ============ KEYBINDS ============
+-- Keybinds
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.RightAlt then
         SilentAimSettings.Enabled = not SilentAimSettings.Enabled
-        robloxNotify("SPENT HUB", SilentAimSettings.Enabled and "Enabled" or "Disabled", 1)
+        robloxNotify("SPENT HUB", SilentAimSettings.Enabled and "Enabled ✓" or "Disabled ✗", 1)
     end
     if input.KeyCode == Enum.KeyCode.RightShift then
-        Window:Toggle()
+        if mainWindow.Visible then
+            TweenService:Create(mainWindow, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Position = UDim2.new(0.5, -500, 1.5, 0)
+            }):Play()
+            task.wait(0.3)
+            mainWindow.Visible = false
+        else
+            mainWindow.Visible = true
+            mainWindow.Position = UDim2.new(0.5, -500, 1.5, 0)
+            TweenService:Create(mainWindow, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, -500, 0.5, -350)
+            }):Play()
+        end
     end
     if input.KeyCode == Enum.KeyCode.End then
-        Window:Destroy()
+        TweenService:Create(mainWindow, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 1
+        }):Play()
+        task.wait(0.3)
+        gui:Destroy()
         pcall(function() fov_circle:Remove() end)
         pcall(function() mouse_box:Remove() end)
         for _, p in ipairs(GetPlayers(Players)) do clearESP(p) end
-        robloxNotify("SPENT HUB", "Unloaded", 1)
+        robloxNotify("SPENT HUB", "Unloaded ✓", 1)
     end
 end)
 
-robloxNotify("SPENT HUB v15", "Loaded successfully", 2)
+-- Fade-in animation
+mainWindow.Position = UDim2.new(0.5, -500, 1.5, 0)
+mainWindow.BackgroundTransparency = 1
+TweenService:Create(mainWindow, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    Position = UDim2.new(0.5, -500, 0.5, -350),
+    BackgroundTransparency = 0.15
+}):Play()
+
+robloxNotify("SPENT HUB v15", "Premium GUI Loaded ✓", 2)
+task.delay(0.5, function()
+    robloxNotify("SPENT HUB", "RAlt: Toggle | RShift: GUI | END: Unload", 3)
+end)
