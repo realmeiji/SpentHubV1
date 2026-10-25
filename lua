@@ -2,22 +2,36 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
 if not syn or not protectgui then getgenv().protectgui = function() end end
 
--- Load Obsidian Library
-local obsidianUrl = "https://raw.githubusercontent.com/Obsidian-Development/Obsidian/main/library.lua"
-local success, Obsidian = pcall(function()
-    return loadstring(game:HttpGet(obsidianUrl))()
-end)
+-- ============ LOAD OBSIDIAN LIBRARY ============
+local Obsidian
+local obsidianUrls = {
+    "https://raw.githubusercontent.com/Obsidian-Development/Obsidian/main/library.lua",
+    "https://raw.githubusercontent.com/Obsidian-Development/Obsidian/main/src/library.lua",
+    "https://raw.githubusercontent.com/ic3w0lf/Obsidian/main/source.lua",
+}
 
-if not success then
-    error("Failed to load Obsidian library")
+for _, url in ipairs(obsidianUrls) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if success and result then
+        Obsidian = result
+        break
+    end
+end
+
+if not Obsidian then
+    error("Failed to load Obsidian library from all sources")
     return
 end
 
 -- ============ ROBLOX NOTIFICATION SYSTEM ============
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
 local function robloxNotify(title, text, duration)
     pcall(function()
@@ -29,9 +43,9 @@ local function robloxNotify(title, text, duration)
     end)
 end
 
-robloxNotify("SPENT HUB", "Loading...", 3)
+robloxNotify("SPENT HUB", "Loading...", 2)
 
--- ============ MAIN SCRIPT ============
+-- ============ SETTINGS ============
 local SilentAimSettings = {
     Enabled = false,
     ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
@@ -69,10 +83,6 @@ local RING_IDLE_COLOR = Color3.fromRGB(255, 255, 255)
 local MainFileName = "UniversalSilentAim"
 local FileToSave = ""
 local Camera = workspace.CurrentCamera
-local RunService = game:GetService("RunService")
-local GuiService = game:GetService("GuiService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 local Mouse = LocalPlayer:GetMouse()
 local GetPlayers = Players.GetPlayers
 local WorldToScreen = Camera.WorldToScreenPoint
@@ -114,6 +124,7 @@ local ExpectedArguments = {
 
 local lastRollTime = 0
 local lastRollResult = false
+
 function CalculateChance(Percentage)
     local now = tick()
     if now - lastRollTime < 0.15 then return lastRollResult end
@@ -382,26 +393,20 @@ local function updateESP()
     end
 end
 
--- ============ CREATE OBSIDIAN WINDOW ============
+-- ============ CREATE WINDOW ============
 local Window = Obsidian:CreateWindow({
     Name = "SPENT HUB v15",
     LoadingTitle = "SPENT HUB",
-    LoadingSubtitle = "Professional Silent Aim Suite",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "SpentHub",
-        FileName = "Config"
-    }
+    LoadingSubtitle = "Professional Silent Aim",
 })
 
 -- ============ MAIN TAB ============
 local MainTab = Window:AddTab("Main")
 
-local Section1 = MainTab:AddSection("Silent Aim Core")
-MainTab:AddToggle("Enabled", {
-    Name = "Master Enable",
+MainTab:AddSection("SILENT AIM")
+MainTab:AddToggle("MasterEnable", {
+    Name = "Enabled",
     CurrentValue = false,
-    Flag = "Toggle1",
     Callback = function(Value)
         SilentAimSettings.Enabled = Value
         mouse_box.Visible = Value
@@ -412,17 +417,15 @@ MainTab:AddDropdown("TargetPart", {
     Name = "Target Part",
     Options = {"Head", "HumanoidRootPart", "Random"},
     CurrentOption = {"HumanoidRootPart"},
-    Flag = "Dropdown1",
     Callback = function(Option)
         SilentAimSettings.TargetPart = Option[1]
     end,
 })
 
-MainTab:AddDropdown("SilentAimMethod", {
+MainTab:AddDropdown("Method", {
     Name = "Aiming Method",
     Options = {"Raycast", "FindPartOnRay", "FindPartOnRayWithWhitelist", "FindPartOnRayWithIgnoreList", "Mouse.Hit/Target"},
     CurrentOption = {"Raycast"},
-    Flag = "Dropdown2",
     Callback = function(Option)
         SilentAimSettings.SilentAimMethod = Option[1]
     end,
@@ -435,17 +438,15 @@ MainTab:AddSlider("HitChance", {
     Increment = 1,
     Suffix = "%",
     CurrentValue = 100,
-    Flag = "Slider1",
     Callback = function(Value)
         SilentAimSettings.HitChance = Value
     end,
 })
 
-local Section2 = MainTab:AddSection("Filters")
+MainTab:AddSection("FILTERS")
 MainTab:AddToggle("TeamCheck", {
     Name = "Team Check",
     CurrentValue = false,
-    Flag = "Toggle2",
     Callback = function(Value)
         SilentAimSettings.TeamCheck = Value
     end,
@@ -454,17 +455,15 @@ MainTab:AddToggle("TeamCheck", {
 MainTab:AddToggle("VisibleCheck", {
     Name = "Visible Check",
     CurrentValue = false,
-    Flag = "Toggle3",
     Callback = function(Value)
         SilentAimSettings.VisibleCheck = Value
     end,
 })
 
-local Section3 = MainTab:AddSection("Target Selection")
+MainTab:AddSection("TARGET TEAMS")
 MainTab:AddToggle("TargetCop", {
     Name = "Target Guards",
     CurrentValue = true,
-    Flag = "Toggle4",
     Callback = function(Value)
         SilentAimSettings.TargetCop = Value
     end,
@@ -473,7 +472,6 @@ MainTab:AddToggle("TargetCop", {
 MainTab:AddToggle("TargetInmate", {
     Name = "Target Inmates",
     CurrentValue = true,
-    Flag = "Toggle5",
     Callback = function(Value)
         SilentAimSettings.TargetInmate = Value
     end,
@@ -482,33 +480,30 @@ MainTab:AddToggle("TargetInmate", {
 MainTab:AddToggle("TargetCriminal", {
     Name = "Target Criminals",
     CurrentValue = true,
-    Flag = "Toggle6",
     Callback = function(Value)
         SilentAimSettings.TargetCriminal = Value
     end,
 })
 
 -- ============ ADVANCED TAB ============
-local AdvancedTab = Window:AddTab("Advanced")
+local AdvTab = Window:AddTab("Advanced")
 
-local Section4 = AdvancedTab:AddSection("Prediction")
-AdvancedTab:AddToggle("MouseHitPrediction", {
+AdvTab:AddSection("PREDICTION")
+AdvTab:AddToggle("Prediction", {
     Name = "Enable Prediction",
     CurrentValue = false,
-    Flag = "Toggle7",
     Callback = function(Value)
         SilentAimSettings.MouseHitPrediction = Value
     end,
 })
 
-AdvancedTab:AddSlider("PredictionAmount", {
+AdvTab:AddSlider("PredictionAmount", {
     Name = "Prediction Amount",
     Min = 50,
     Max = 500,
     Increment = 1,
     Suffix = "x1000",
     CurrentValue = 165,
-    Flag = "Slider2",
     Callback = function(Value)
         SilentAimSettings.MouseHitPredictionAmount = Value / 1000
         PredictionAmount = Value / 1000
@@ -518,71 +513,64 @@ AdvancedTab:AddSlider("PredictionAmount", {
 -- ============ ESP TAB ============
 local ESPTab = Window:AddTab("ESP")
 
-local Section5 = ESPTab:AddSection("ESP Core")
-ESPTab:AddToggle("ESP_Enabled", {
+ESPTab:AddSection("ESP CORE")
+ESPTab:AddToggle("EnableESP", {
     Name = "Enable ESP",
     CurrentValue = false,
-    Flag = "Toggle8",
     Callback = function(Value)
         SilentAimSettings.ESP_Enabled = Value
     end,
 })
 
-ESPTab:AddToggle("ESP_Team", {
+ESPTab:AddToggle("TeamColors", {
     Name = "Team Colors",
     CurrentValue = false,
-    Flag = "Toggle9",
     Callback = function(Value)
         SilentAimSettings.ESP_Team = Value
     end,
 })
 
-local Section6 = ESPTab:AddSection("ESP Elements")
-ESPTab:AddToggle("ESP_Highlight", {
-    Name = "Player Highlight",
+ESPTab:AddSection("ELEMENTS")
+ESPTab:AddToggle("Highlight", {
+    Name = "Highlight",
     CurrentValue = true,
-    Flag = "Toggle10",
     Callback = function(Value)
         SilentAimSettings.ESP_Highlight = Value
     end,
 })
 
-ESPTab:AddToggle("ESP_Name", {
-    Name = "Display Names",
+ESPTab:AddToggle("Names", {
+    Name = "Names",
     CurrentValue = true,
-    Flag = "Toggle11",
     Callback = function(Value)
         SilentAimSettings.ESP_Name = Value
     end,
 })
 
-ESPTab:AddToggle("ESP_Health", {
+ESPTab:AddToggle("HealthBars", {
     Name = "Health Bars",
     CurrentValue = true,
-    Flag = "Toggle12",
     Callback = function(Value)
         SilentAimSettings.ESP_Health = Value
     end,
 })
 
-ESPTab:AddToggle("ESP_Trace", {
-    Name = "Tracer Lines",
+ESPTab:AddToggle("Tracers", {
+    Name = "Tracers",
     CurrentValue = false,
-    Flag = "Toggle13",
     Callback = function(Value)
         SilentAimSettings.ESP_Trace = Value
     end,
 })
 
-local Section7 = ESPTab:AddSection("Detection Range")
-ESPTab:AddSlider("ESP_MaxDistance", {
+ESPTab:AddSection("RANGE")
+ESPTab:AddSlider("MaxDistance", {
     Name = "Max Distance",
     Min = 100,
     Max = 3000,
     Increment = 50,
     Suffix = "studs",
     CurrentValue = 1500,
-    Flag = "Slider3",
     Callback = function(Value)
         SilentAimSettings.ESP_MaxDistance = Value
     end,
@@ -591,11 +579,10 @@ ESPTab:AddSlider("ESP_MaxDistance", {
 -- ============ VISUALS TAB ============
 local VisualsTab = Window:AddTab("Visuals")
 
-local Section8 = VisualsTab:AddSection("FOV Circle")
-VisualsTab:AddToggle("FOVVisible", {
-    Name = "Show FOV Circle",
+VisualsTab:AddSection("FOV CIRCLE")
+VisualsTab:AddToggle("FOVCircle", {
+    Name = "Show FOV",
     CurrentValue = false,
-    Flag = "Toggle14",
     Callback = function(Value)
         SilentAimSettings.FOVVisible = Value
         fov_circle.Visible = Value
@@ -609,23 +596,21 @@ VisualsTab:AddSlider("FOVRadius", {
     Increment = 10,
     Suffix = "px",
     CurrentValue = 130,
-    Flag = "Slider4",
     Callback = function(Value)
         SilentAimSettings.FOVRadius = Value
         fov_circle.Radius = Value
     end,
 })
 
-VisualsTab:AddToggle("ShowSilentAimTarget", {
-    Name = "Show Target Box",
+VisualsTab:AddToggle("TargetBox", {
+    Name = "Target Box",
     CurrentValue = false,
-    Flag = "Toggle15",
     Callback = function(Value)
         SilentAimSettings.ShowSilentAimTarget = Value
     end,
 })
 
-local Section9 = VisualsTab:AddSection("Theme")
+VisualsTab:AddSection("THEME")
 VisualsTab:AddButton("Pink", function()
     mouse_box.Color = Color3.fromRGB(255, 182, 193)
     fov_circle.Color = Color3.fromRGB(255, 182, 193)
@@ -654,8 +639,8 @@ end)
 -- ============ SETTINGS TAB ============
 local SettingsTab = Window:AddTab("Settings")
 
-local Section10 = SettingsTab:AddSection("Configuration")
-local fileInput = SettingsTab:AddInput("ConfigName", {
+SettingsTab:AddSection("SAVE/LOAD")
+SettingsTab:AddInput("ConfigName", {
     Name = "Config Name",
     CurrentValue = "",
     PlaceHolder = "Enter name",
@@ -668,13 +653,13 @@ local fileInput = SettingsTab:AddInput("ConfigName", {
 SettingsTab:AddButton("Save Config", function()
     if FileToSave and FileToSave ~= "" then
         UpdateFile(FileToSave)
-        robloxNotify("SPENT HUB", "Config saved: " .. FileToSave, 2)
+        robloxNotify("SPENT HUB", "Saved: " .. FileToSave, 2)
     else
-        robloxNotify("SPENT HUB", "Enter a config name", 2)
+        robloxNotify("SPENT HUB", "Enter name", 1)
     end
 end)
 
-local Section11 = SettingsTab:AddSection("Load Configuration")
+SettingsTab:AddSection("LOAD")
 local files = GetFiles()
 if #files > 0 then
     for _, name in ipairs(files) do
@@ -683,16 +668,13 @@ if #files > 0 then
             robloxNotify("SPENT HUB", "Loaded: " .. name, 2)
         end)
     end
-else
-    SettingsTab:AddParagraph("No saved configs", "Create and save a config first")
 end
 
-local Section12 = SettingsTab:AddSection("Information")
+SettingsTab:AddSection("INFO")
 SettingsTab:AddParagraph("SPENT HUB v15", "Professional Silent Aim Suite")
-SettingsTab:AddParagraph("Keybinds", "RAlt: Toggle | RShift: GUI | END: Unload")
-SettingsTab:AddParagraph("Credits", "Averiias • Stefanuk12 • xaxa")
+SettingsTab:AddParagraph("Keybinds", "RAlt: Toggle\nRShift: GUI\nEND: Unload")
 
--- ============ HOOK FUNCTIONS ============
+-- ============ HOOKS ============
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -760,7 +742,7 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
--- Main loop
+-- ============ MAIN LOOP ============
 resume(create(function()
     RenderStepped:Connect(function()
         local lockedTarget = getClosestPlayer()
@@ -779,11 +761,7 @@ resume(create(function()
         if SilentAimSettings.FOVVisible then
             fov_circle.Visible = true
             fov_circle.Position = getMousePosition()
-            if lockedTarget then
-                fov_circle.Color = TARGET_LOCK_COLOR
-            else
-                fov_circle.Color = RING_IDLE_COLOR
-            end
+            fov_circle.Color = lockedTarget and TARGET_LOCK_COLOR or RING_IDLE_COLOR
         else
             fov_circle.Visible = false
         end
@@ -792,25 +770,23 @@ resume(create(function()
     end)
 end))
 
--- Keybinds
+-- ============ KEYBINDS ============
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.RightAlt then
         SilentAimSettings.Enabled = not SilentAimSettings.Enabled
-        robloxNotify("SPENT HUB", "Silent Aim " .. (SilentAimSettings.Enabled and "Enabled" or "Disabled"), 1)
+        robloxNotify("SPENT HUB", SilentAimSettings.Enabled and "Enabled" or "Disabled", 1)
     end
     if input.KeyCode == Enum.KeyCode.RightShift then
         Window:Toggle()
     end
     if input.KeyCode == Enum.KeyCode.End then
-        pcall(function() Window:Destroy() end)
+        Window:Destroy()
         pcall(function() fov_circle:Remove() end)
         pcall(function() mouse_box:Remove() end)
         for _, p in ipairs(GetPlayers(Players)) do clearESP(p) end
         robloxNotify("SPENT HUB", "Unloaded", 1)
-        print("SPENT HUB unloaded.")
     end
 end)
 
 robloxNotify("SPENT HUB v15", "Loaded successfully", 2)
-print("SPENT HUB v15.0 loaded with Obsidian library.")
